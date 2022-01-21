@@ -4,13 +4,14 @@ import numpy as np
 import time
 import pyhf
 
-file = open("input.json", 'r')
+file = open("likelihood_32.json", 'r')
 json_data = json.load(file)
 
 for key, value in json_data.items():
     if(key == 'channels'):
-    	for i in value:  
-        	for samp in i.get('samples'):
+    	for i in value:
+    		print("i",i.get('name'))
+    		for samp in i.get('samples'):
         		#skip samples which are not to be pruned
         		if ('mufakes') in samp.get('name'):
         			continue
@@ -26,28 +27,32 @@ for key, value in json_data.items():
         				lists_to_modify.append(mod.get('data').get('hi_data'))
         				lists_to_modify.append(mod.get('data').get('lo_data'))
         		
-        		#Set all nominal negative yields to 0 - this is giving an assertion error 
-        		#Fix it to really small yields 
+        		#Set all nominal negative yields to 0 - this is giving an assertion error
+        		 
+        		#Solution - Fix it to negligible yields
+        		#Poisson prob mass distribution is not well defined for 0 yields in histfactory
+        		#Fix Nominal, corresponding uncertainties, staterror to 1e-20. 
         		for data_index in range(len(samp.get('data'))):
-        			if samp.get('data')[data_index] < 0:
+        			if samp.get('data')[data_index] < 0 or samp.get('data')[data_index] == 0:
         				for list in lists_to_modify:
-        					list[data_index] = 0.0
+        					list[data_index] = 1e-20
         		
-        		#Set all the corresponding uncertainties (histosys, staterror) to 0
+        		#Set all the uncertainties (histosys, staterror) to 0
         		for i, sys in enumerate(lists_to_modify):
         			for j, val in enumerate(sys):
-        				if(val<0):
-        					sys[j]=0.0
+        				if(val<0 or val == 0):
+        					sys[j]=1e-20
         		
-        		#For staterror data > 1, set it to 0, set the corresponding nominal, uncertainties to 0
-        		#This gives an assertion error - fix, Do you need to prune this ? 
+        		#For RELATIVE staterror data > 1, set it to 1e-20, set the corresponding nominal, uncertainties to 0
         		for index in range(len(samp.get('data'))): 
         			#no staterror for signal, hardcoded for now      			
         			if ('ttX') in samp.get('name'):
         				continue
-        			if (lists_to_modify[1][index] > 1):
+        				
+        			#Get relative error, data in staterror is absolute error        				
+        			if (lists_to_modify[1][index]/samp.get('data')[index] > 1):
         				for list in lists_to_modify:
-        					list[index] = 0.0
+        					list[index] = 1e-20
         
 channels = json_data['channels']
 observe = json_data['observations']
@@ -114,7 +119,7 @@ for ichannel, channel in enumerate(channels):
 					mods_to_remove.append(imodifier)
 		for modifier in reversed(mods_to_remove): del modifiers[modifier]
 				
-with open("pruned.json",'w') as outfile:
+with open("pruned_32_negligible.json",'w') as outfile:
 	#issue - values are printed vertically, not horizontally, write up an encoder
 	json.dump(json_data, outfile, sort_keys=True, indent=4)
 file.close()	
